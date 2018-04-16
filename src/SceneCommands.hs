@@ -58,12 +58,12 @@ formatScenePost game nick start end summary logs = foldl1 (++) [
                     "Scene for [b]",game,"[/b], created by ",nick,"\n",
                     "[b]Duration: [/b]",Database.formatTimeDiff start end,"\n",
                     "[b]Summary: [/b]",summary,"\n",
-                    "[b]Logs: [/b]","[spoiler][nobbc]",content,"[/nobbc][/spoiler]" ]
+                    "[b]Logs: [/b]","[spoiler]",bbcContent,"[/spoiler]" ]
   where
-    content = Reg.subRegex (Reg.mkRegex "\\[/?nobbc\\]\\[/?nobbc\\]") bbcContent ""
-    (Right bbcContent) = parseOnly (formattingParser []) (Text.pack filteredContent')
-    filteredContent = Reg.subRegex (Reg.mkRegexWithOpts "\\[/nobbc\\]" False False) (intercalate "\n" (map Database.formatLog logs)) "" --filter out [/nobbc]
-    filteredContent' = Reg.subRegex (Reg.mkRegexWithOpts "\x0003([0-9][0-9])?" False False) filteredContent ""
+    (Right bbcContent) = parseOnly (formattingParser []) (Text.pack filteredContent'')
+    filteredContent = Reg.subRegex (Reg.mkRegexWithOpts "\\[" False False) (intercalate "\n" (map Database.formatLog logs)) "\x2045" --filter out [ and replace with a different unicode left angle
+    filteredContent' = Reg.subRegex (Reg.mkRegexWithOpts "\\]" False False) filteredContent "\x2046" --same but for right square bracket
+    filteredContent'' = Reg.subRegex (Reg.mkRegexWithOpts "\x0003([0-9][0-9])?" False False) filteredContent' "" --filter out colors, which in IRC use the 0003 + numbers format.
     endFormatting :: [Format] -> String --generate bbcode to close off current formatting
     endFormatting fs = rec fs
       where
@@ -90,10 +90,10 @@ formatScenePost game nick start end summary logs = foldl1 (++) [
           (m2, fs') <- case f of 
             Right fmt -> do
               if elem fmt fs
-                then let ffs = filter (/=fmt) fs in return ("[/nobbc]" ++ endFormatting fs ++ beginFormatting ffs ++ "[nobbc]", ffs)   
-                else return ("[/nobbc]" ++ beginFormatting [fmt] ++ "[nobbc]", fmt : fs)
-            Left EndFormattingFound -> return ("[/nobbc]" ++ endFormatting fs ++ "[nobbc]", [])
-            Left NewLineFound -> return ("\n[/nobbc]" ++ endFormatting fs ++ "[nobbc]", [])
+                then let ffs = filter (/=fmt) fs in return (endFormatting fs ++ beginFormatting ffs, ffs)   
+                else return (beginFormatting [fmt], fmt : fs)
+            Left EndFormattingFound -> return (endFormatting fs, [])
+            Left NewLineFound -> return ("\n" ++ endFormatting fs, [])
           rest <- formattingParser fs'
           return $ m ++ m2 ++ rest
       
