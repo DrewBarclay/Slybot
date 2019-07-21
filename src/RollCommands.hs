@@ -208,48 +208,49 @@ rollFATE pmsg args = do
     prettyRoll 1 = "\ETX03+\ETX"
     prettyRoll _ = "ERROR"
 
-parseOwod :: String -> Either String (Int, Int)
+parseOwod :: String -> Either String (Int, Int, Bool)
 parseOwod s = parseOnly parseOwodExpr (B.pack s)
 
-parseOwodExpr :: Parser (Int, Int)
+parseOwodExpr :: Parser (Int, Int, Bool)
 parseOwodExpr = do
   numDice <- decimal
   unless (numDice <= 100) $ fail "Number of dice should be <= 100."
   char 'd'
   difficulty <- decimal
   unless (difficulty >= 1 && difficulty <= 10) $ fail "Difficulty should be between 1-10."
-  return (numDice, difficulty)
+  specialty <- option False $ do
+    char 's'
+    return True
+  return (numDice, difficulty, specialty)
 
 rollOwod :: PrivMsg -> String -> BotAction ()
 rollOwod pmsg args = case parseOwod args of
   Left err -> sendMsg responseTarget $ "Error: " ++ err
-  Right (numDice, difficulty) -> do
+  Right (numDice, difficulty, specialty) -> do
     rolls <- replicateM numDice (getBotRandom 1 10)
-    let successes = sucs rolls difficulty
+    let successes = sucs rolls difficulty specialty
     let colorDice difficulty die
           | die >= difficulty = "\ETX03" ++ show die ++ "\ETX"
           | die == 1          = "\ETX041\ETX"
           | otherwise         = show die
     let prettyDice = "[" ++ (intercalate ", " $ map (colorDice difficulty) rolls) ++ "]"
     let prettyDescription 
-          | successes < 0  = "\ETX04DRAMATIC FAILURE!\ETX"
+          | successes <= 0 && any (== 1) rolls = "\ETX04DRAMATIC FAILURE!\ETX"
           | successes == 0 = "\ETX04failure\ETX"
           | successes == 1 = "\ETX031 success\ETX"
           | successes > 5  = "\ETX03" ++ show successes ++ " successes (DRAMATIC SUCCESS!)\ETX"
           | otherwise      = "\ETX03" ++ show successes ++ " successes\ETX"
-    sendMsg responseTarget $ foldl1 (++) ([source, " rolls ", prettyDice, ". Result: ", prettyDescription])
+    sendMsg responseTarget $ foldl1 (++) ([source, " rolls ", prettyDice, if specialty then " with specialty" else "", ". Result: ", prettyDescription])
   where
     responseTarget = getResponseTarget pmsg
     source = getSourceNick . getSource $ pmsg
 
-    sucs :: [Int] -> Int -> Int
-    sucs dice difficulty = successes
+    sucs :: [Int] -> Int -> Bool -> Int
+    sucs dice difficulty specialty = successes
       where
-        --successes k= 3
         successes = foldr count 0 dice
-        count 10 acc = acc + 2
+        count 10 acc = if specialty then acc + 2 else acc + 1
         count x acc | x >= difficulty = acc + 1
-        count 1 acc = acc - 1
         count _ acc = acc
 
 data BatchRollResult = Batch [Int] BatchRollResult
