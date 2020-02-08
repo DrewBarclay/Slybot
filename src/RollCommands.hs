@@ -88,12 +88,10 @@ rollEval pmsg args = do
     Right (sShow, sCode) -> do
       let msg o e = foldl1 (++) [source, " rolls ", sShow, ". Result: ", o, e]
       includeFile <- liftIO $ fmap (\s -> s </> "static" </> "MuevalInclude.hs") getDataDir
-      result <- liftIO $ readProcessWithExitCode Config.muevalBinary ["+RTS", "-N", "-RTS", "-l", includeFile, "--expression", sCode] "" 
+      result <- liftIO $ readProcessWithExitCode Config.muevalBinary ["+RTS", "-N", "-RTS", "-l", includeFile, "-t", "100", "--expression", sCode] "" 
       case result of
-        (ExitFailure 127, _, _) -> sendMsg (getResponseTarget pmsg) "failed to run mueval"
-        (ExitFailure 1, o, e) -> sendMsg (getResponseTarget pmsg) (msg o e)
         (ExitSuccess, o, e) -> sendMsg (getResponseTarget pmsg) (msg o e)
-        (_, _, _) -> sendMsg (getResponseTarget pmsg) "failure occurred"
+        (ExitFailure code, o, e) -> sendMsg (getResponseTarget pmsg) ("mueval failure occurred (" ++ show code ++ ")! output: " ++ msg o e)
   where 
     source = getSourceNick . getSource $ pmsg
 
