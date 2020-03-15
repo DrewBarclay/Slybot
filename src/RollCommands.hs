@@ -54,15 +54,13 @@ rollDnd pmsg args = do
 parseDnd :: String -> Int ->  Either String (String, String)
 parseDnd s gen = parseOnly (parseDndExpr gen) (B.pack s)
 
-
-
 parseDndExpr :: Int -> Parser (String, String)
 parseDndExpr gen = do
   ns <- parseNList
   bonus <- (skipSpace *> signed decimal) <|> (return 0) -- endOfInput was here
-  adv <- (skipSpace *> string "adv" >> return (Just True)) <|> (skipSpace *> string "dis" >> return (Just False)) <|> (return Nothing)
+  adv <- (skipSpace *> string "adv" >> return (Just (True, 2))) <|> (skipSpace *> string "dis" >> return (Just (False, 2))) <|> (skipSpace *> string "elv" >> return (Just (True, 3))) <|> (return Nothing)
   return $ case adv of Nothing -> evalSimple ns bonus gen
-                       Just hasAdv -> evalAdv ns bonus adv gen
+                       Just (hasAdv, numDice) -> evalAdv ns bonus hasAdv numDice gen
   where
     parseNList :: Parser [Int]
     parseNList = do
@@ -72,21 +70,29 @@ parseDndExpr gen = do
       where
         rolls = Prelude.take (length ns) (infiniteRoll gen)
         result = map (+bonus) $ zipWith (+) rolls ns
-    evalAdv ns bonus (Just hasAdv) gen = (prettyRolls, show result)
+    evalAdv ns bonus hasAdv numDice gen = (prettyRolls, show result)
       where
-        rolls = Prelude.take (2 * length ns) (infiniteRoll gen)
-        roll1 = Prelude.take (length ns) rolls
-        roll2 = Prelude.drop (length ns) rolls
-        finalRolls = map (\(r1, r2) -> if hasAdv then max r1 r2 else min r1 r2) $ zip roll1 roll2
-        prettifyRollList rs = "(" ++ (concat . intersperse "|") (map (\r -> strike r ++ color r ++ show r ++ "\ETX" ++ strike r) rs) ++ ")"
+        rolls = group numDice $ Prelude.take (numDice * length ns) (infiniteRoll gen)
+        finalRolls = map (\rs -> if hasAdv then maximum rs else minimum rs) rolls
+        prettifyRollList rs = "(" ++ (concat . intersperse "|") (map formatRoll rs) ++ ")"
           where -- \RS toggle strikethrough
             isChoice r = if hasAdv then r == maximum rs else r == minimum rs
-            strike r = "" --if isChoice r then "\RS" else "" -- does not appear to work?
+            formatRoll r = concat [
+              -- if isChoice r then "\STX" else "", --bold
+              color r,
+              show r,
+              "\ETX", -- end color
+              -- if isChoice r then "\STX" else "" -- end bold
+              ]
             color r = if r == maximum rs then "\ETX03" else "\ETX04"
-        prettifyRollPair (r1, r2) = prettifyRollList [r1, r2]
-        prettifyRollTriple (r1, r2, r3) = prettifyRollList [r1, r2, r3]
-        prettyRolls = (concat . intersperse ",") (map prettifyRollPair (zip roll1 roll2)) ++ " -> " ++ show finalRolls
+        prettyRolls = (concat . intersperse ",") (map prettifyRollList rolls) ++ " -> " ++ show finalRolls
         result = map (+bonus) $ zipWith (+) finalRolls ns
+
+        group :: Int -> [a] -> [[a]]
+        group _ [] = []
+        group n l
+          | n > 0 = (Prelude.take n l) : (group n (Prelude.drop n l))
+          | otherwise = error "Negative or zero n"
 
 attackRoll :: [Int] -> Int -> String
 attackRoll mods gen = foldl1 (++) [show roll, " -> ", show res]
