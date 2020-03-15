@@ -81,7 +81,7 @@ parseDndExpr gen = do
               -- if isChoice r then "\STX" else "", --bold
               color r,
               show r,
-              "\ETX", -- end color
+              "\ETX" -- end color
               -- if isChoice r then "\STX" else "" -- end bold
               ]
             color r = if r == maximum rs then "\ETX03" else "\ETX04"
