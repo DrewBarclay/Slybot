@@ -51,6 +51,7 @@ interpretPrivMsg pmsg = do
       case action of
         "help" -> forM_ Config.help_text_lines (sendMsg responseSource)
         "echo" -> sendMsg responseTarget ("Echo: " ++ args)
+        "3" -> sendMsg responseTarget "<3"
         "command" -> command pmsg args
         "log" -> fetchLogs pmsg args
         "roll" -> RollCommands.rollGeneric pmsg args
