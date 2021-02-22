@@ -1,5 +1,6 @@
 import qualified Connection 
 import qualified Commands 
+import qualified RollCommands
 import qualified Database 
 import qualified Common 
 --import qualified SceneSummary
@@ -19,6 +20,7 @@ import Control.Concurrent.MVar
 main :: IO ()
 main = do
 	--_ <- forkIO (SceneSummary.summaryServer) 
+	_ <- forkIO (RollCommands.keepMuevalWarm)
 	bracket setup teardown run
 
 setup = do

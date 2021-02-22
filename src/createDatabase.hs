@@ -18,7 +18,7 @@ main = do
 	
 	HDBC.run database "DROP TABLE IF EXISTS channels" []
 	HDBC.run database "CREATE TABLE channels (name TEXT, logCount INTEGER)" []
-	HDBC.run database "INSERT INTO channels VALUES (\"#public\", 25)" []
+	HDBC.run database "INSERT INTO channels VALUES (\"#public2\", 25)" []
 
 	HDBC.run database "DROP TABLE IF EXISTS posted_scenes" []
 	HDBC.run database "CREATE TABLE posted_scenes (threadID TEXT, postID TEXT, game TEXT, creator_host TEXT, creator_nick TEXT, start TEXT, end TEXT, summary TEXT, channel TEXT, summaryCode TEXT)" []

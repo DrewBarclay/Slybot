@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 module RollCommands (
   rollNWOD,
   rollGeneric,
@@ -6,7 +7,10 @@ module RollCommands (
   rollEval,
   rollDnd,
   rollOwod,
-  rollFATE
+  rollFATE,
+  rollTrinity,
+
+  keepMuevalWarm
 ) where
 
 import qualified Network.IRC as IRCB
@@ -17,6 +21,7 @@ import Control.Monad.Except
 import Data.Maybe(fromMaybe,fromJust,isNothing,isJust,Maybe(..))
 import Control.Monad.Trans.Class
 import qualified Data.ByteString.Char8 as C
+import Control.Concurrent(threadDelay)
 
 import qualified Config
 import qualified Database
@@ -107,6 +112,14 @@ infiniteRoll gen = rec (mkStdGen gen)
   where
     rec g = r : rec g'
       where (r, g') = randomR (1, 20) g
+
+-- mueval times out on first run but won't if a second command is run shortly after; this is the dumbest bug ever
+keepMuevalWarm :: IO () 
+keepMuevalWarm = do -- XXX: refactor into a shared f with rollEval, lazy
+  includeFile <- liftIO $ fmap (\s -> s </> "static" </> "MuevalInclude.hs") getDataDir
+  result <- liftIO $ readProcessWithExitCode Config.muevalBinary ["+RTS", "-N", "-RTS", "-l", includeFile, "-t", "100", "--expression", "1+1"] ""
+  threadDelay (30 * 1000000) --sleep for a 30s
+  keepMuevalWarm
 
 rollEval :: PrivMsg -> String -> BotAction ()
 rollEval pmsg args = do
@@ -323,3 +336,69 @@ rollNWOD pmsg args = do
             ""
           else
             "{ " ++ renderBatch b ++ "}"
+
+
+data TrinityRollArgs = TrinityRollArgs {numDice:: Int, rollAgain :: Int, targetNumber:: Int, enhancement :: Int}
+rollTrinity :: PrivMsg -> String -> BotAction ()
+rollTrinity pmsg args = do
+  case parseTrinity args of 
+    Left err -> sendMsg responseTarget err
+    Right trinityArgs -> sendRollMessage trinityArgs
+  where
+    responseTarget = getResponseTarget pmsg
+    source = getSourceNick . getSource $ pmsg
+
+    sendRollMessage (TrinityRollArgs {numDice=numDiceRaw, rollAgain=rollAgainRaw, targetNumber=targetNumber, enhancement=enhancement}) = do
+      (resultBatch,successTotal, rollsFlat) <- rollDiceBatch (max 1 count)
+      let resultDescription = renderBatch resultBatch
+      let botch = successTotal == 0 && 1 `elem` rollsFlat
+      sendMsg responseTarget $ foldl1 (++) ([source, " rolls ", dieDescription, ". Result: ",
+        resultDescription, " ("] ++
+          case (successTotal, botch) of
+            (0, True) -> ["\ETX04BOTCH!\ETX)"]
+            (0, False) -> ["\ETX04failure\ETX)"]
+            otherwise -> case successTotal + enhancement of
+              1 -> ["\ETX031 success\ETX)"]
+              n -> ["\ETX03",show n, " successes\ETX)" ])
+        where
+          count = max 0 (min 100 numDiceRaw)
+          rollAgain = max 6 rollAgainRaw
+          dieDescription = foldl1 (++) [show count, " dice with ", show rollAgain, "-again (target: ", show targetNumber, ")"]
+          rollDiceBatch remaining =
+            if remaining <= 0 then
+              return (Batch [] undefined,0, [])
+            else do
+              batchResults <- replicateM remaining (getBotRandom 1 10)
+              let successes = length . filter (\roll -> roll >= targetNumber) $ batchResults
+              let nextBatchSize = length . filter (\roll -> roll >= rollAgain) $ batchResults
+              (nextBatch,nextBatchSuccesses,rollsFlat) <- rollDiceBatch nextBatchSize
+              return $ (Batch batchResults nextBatch, successes + nextBatchSuccesses, batchResults ++ rollsFlat)
+          renderBatch (Batch rolls next) = rollsString ++ " " ++ renderNextBatch next
+            where
+              rollsString = intercalate ", " . map (\r -> if r >= targetNumber then "\ETX03" ++ show r ++ "\ETX" else show r) $ rolls
+              renderNextBatch b@(Batch r _) =
+                if null r then
+                  ""
+                else
+                  "{ " ++ renderBatch b ++ "}"
+
+    parseTrinity :: String -> Either String TrinityRollArgs
+    parseTrinity s = parseOnly parseTrinityExpr (B.pack s)
+
+    parseTrinityExpr :: Parser TrinityRollArgs
+    parseTrinityExpr = do
+      skipSpace
+      n <- decimal
+      let rollArgs = TrinityRollArgs {numDice=n, rollAgain=10, targetNumber=7, enhancement=0}
+      parseParts rollArgs
+
+      where
+        parsePart rollArgs = (decimal >>= \n -> string "-again" >> (return $ rollArgs {rollAgain=n})) <|>
+                              ((string "target" <|> string "t") >> skipSpace >> decimal >>= \n -> return $ rollArgs {targetNumber=n}) <|>
+                              (signed decimal >>= \n -> return $ rollArgs {enhancement=n}) <|>
+                              (endOfInput >> return rollArgs)
+        parseParts rollArgs = do
+          skipSpace 
+          rollArgs <- parsePart rollArgs 
+          skipSpace 
+          (endOfInput >> return rollArgs) <|> parseParts rollArgs

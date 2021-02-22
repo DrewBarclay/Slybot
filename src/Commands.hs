@@ -62,6 +62,7 @@ interpretPrivMsg pmsg = do
         "ro" -> RollCommands.rollOwod pmsg args
         "rg" -> RollCommands.rollGURPS pmsg args
         "rf" -> RollCommands.rollFATE pmsg args
+        "rt" -> RollCommands.rollTrinity pmsg args
         "game" -> SceneCommands.gameCommands pmsg args
         "scene" -> SceneCommands.sceneCommands pmsg args
         "join" -> joinChannel pmsg args
