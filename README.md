@@ -63,7 +63,7 @@ forum_password = "forum password" :: String
 summarize_url = "url to scene summary server" :: String
 database = "logs.db"
 default_teaser_length = 25
-muevalBinary = "mueval"
+muevalBinary = "mueval" -- recommended install via `stack install mueval` with the exact GHC version you use to compile Slybot, then replace with /home/ubuntu/.local/bin/mueval
 
 help_text_lines = [
   "Slybot is your friend!",
