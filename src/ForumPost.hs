@@ -26,12 +26,13 @@ postTo thread content = do
   putStrLn "Starting postTo"
   --(exitCode, stdout, stderr) <- readProcessWithExitCode "phantomjs" ["post.js", Config.forum_user, Config.forum_password, Config.forum_url, thread, "", "", ""] "SLYBOT ERROR: unable to modify post"
   postJs <- fmap (\s -> s </> "static" </> "post.js") getDataDir
-  (stdin, stdout, stderr, pid) <- runInteractiveProcess "phantomjs" ["--ssl-protocol=any", postJs, Config.forum_user, Config.forum_password, Config.forum_url, thread] Nothing Nothing
+  (stdin, stdout, stderr, pid) <- runInteractiveProcess "phantomjs" ["--web-security=false", "--ignore-ssl-errors=true", "--ssl-protocol=any", postJs, Config.forum_user, Config.forum_password, Config.forum_url, thread] Nothing Nothing
   hSetBinaryMode stdin False --to allow utf8
   forkIO (hPutStr stdin content >> hClose stdin)
   stdouti <-  hGetContents stdout >>= putAndReturn
   putStrLn (last $ splitOn "\n" stdouti)
   let postId = show (read ((!!1) . reverse $ splitOn "\n" stdouti) :: Integer)
+  putStrLn ("PhantomJS post succeeded, got postId" ++ postId)
   return postId
 
 putAndReturn :: String -> IO String
@@ -45,7 +46,7 @@ isErrorCode (ExitSuccess) = False
 modifyPost :: String -> String -> String -> IO ()
 modifyPost thread postID content = do
   postJs <- fmap (\s -> s </> "static" </> "post.js") getDataDir
-  (exitCode, stdout, stderr) <- readProcessWithExitCode "phantomjs" ["--ssl-protocol=any", postJs, Config.forum_user, Config.forum_password, Config.forum_url, thread, postID] content
+  (exitCode, stdout, stderr) <- readProcessWithExitCode "phantomjs" ["--ignore-ssl-errors=true", "--web-security=false", "--ssl-protocol=any", postJs, Config.forum_user, Config.forum_password, Config.forum_url, thread, postID] content
   putStrLn stdout
   if (isErrorCode exitCode) then error ("Nonzero exit code from PhantomJS: " ++ show exitCode ++ ", stderr: " ++ stderr) else return ()
   return ()

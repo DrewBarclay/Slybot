@@ -25,6 +25,14 @@ var isEdit = !!settings.msgId;
 
 var page = require('webpage').create();
 
+page.onResourceRequested = function(requestData, request) {
+  if (requestData['Content-Type'] == 'application/javascript' || requestData['Content-Type'] == 'text/javascript') {
+    console.log('Disabling JavaScript files. Aborting: ' + requestData['url']);
+    request.abort();
+  }
+};
+// page.settings.javascriptEnabled = false;
+
 function fail(msg){
 		console.log("Problem detected. Exiting post.js");
 		msg && console.log("Message: " + msg);
@@ -36,7 +44,11 @@ page.onError = function(msg, trace){
 	trace.forEach(function(item) {
 	        console.log('  ', item.file, ':', item.line);
 	});
-	fail();
+        if (msg.indexOf("Can't find variable:") >= 0) {
+	     console.log("^ Had error in JS in page but skipping because it don't matter ;)");
+        } else {
+	    fail();
+	}
 }
 
 page.onConsoleMessage = function(msg) {
@@ -57,8 +69,9 @@ page.onResourceTimeout = function(request) {
 };*/
 
 page.onResourceError = function(resourceError) {
-  console.log('Unable to load resource (#' + resourceError.id + 'URL:' + resourceError.url + ')');
-  console.log('Error code: ' + resourceError.errorCode + '. Description: ' + resourceError.errorString);
+  // do not print as we do not want to ruin the parsing of the post id at the end...
+  // console.log('Unable to load resource (#' + resourceError.id + 'URL:' + resourceError.url + ')');
+  //console.log('Error code: ' + resourceError.errorCode + '. Description: ' + resourceError.errorString);
 };
 
 page.settings.resourceTimeout = 55000; //55 seconds
@@ -70,6 +83,7 @@ login(page, function(){
 	post(page, function(postId){ 
 		console.log(postId);
 		phantom.exit(0); 
+		console.log("... I should be exited?");
 	}); 
 });
 
@@ -81,6 +95,7 @@ function login(page, callback){
     if(status === "success"){
 			//page.render("login.png");
 			console.log("Login page successfully loaded.");
+			// page.settings.javascriptEnabled = true;
 			page.evaluate(function(settings){
 				console.log("Logging in begun!"); 
 				document.querySelector("form[id=frmLogin] input[name=user]").value = settings.user;
